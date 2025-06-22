@@ -18,11 +18,13 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import org.json.JSONObject;
+import org.mule.extension.mulechain.api.metadata.ConfidenceScore;
 import org.mule.extension.mulechain.api.metadata.LLMResponseAttributes;
 import org.mule.extension.mulechain.internal.config.LangchainLLMConfiguration;
 import org.mule.extension.mulechain.internal.constants.MuleChainConstants;
 import org.mule.extension.mulechain.internal.error.MuleChainErrorType;
 import org.mule.extension.mulechain.internal.error.provider.AiServiceErrorTypeProvider;
+import org.mule.extension.mulechain.internal.helpers.ConfidenceService;
 import org.mule.extension.mulechain.internal.llm.config.ConfigExtractor;
 import org.mule.extension.mulechain.internal.llm.type.ModerationModelType;
 import org.mule.runtime.extension.api.annotation.Alias;
@@ -44,7 +46,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is a container for operations, every public method in this class will be taken as an extension operation.
+ * This class is a container for operations, every public method in this class
+ * will be taken as an extension operation.
  */
 public class LangchainLLMOperations {
 
@@ -59,27 +62,37 @@ public class LangchainLLMOperations {
    * Implements a simple Chat agent to enable chat with the LLM
    * 
    * @param configuration Refers to the configuration object
-   * @param prompt User defined prompt query
+   * @param prompt        User defined prompt query
    * @return Returns the corresponding response as returned by the LLM
    */
   @MediaType(value = APPLICATION_JSON, strict = false)
   @Alias("CHAT-answer-prompt")
   @Throws(AiServiceErrorTypeProvider.class)
   @OutputJsonType(schema = "api/response/Response.json")
-  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> answerPromptByModelName(@Config LangchainLLMConfiguration configuration,
+  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> answerPromptByModelName(
+                                                                                                                             @Config LangchainLLMConfiguration configuration,
                                                                                                                              @Content String prompt) {
-    // OpenAI parameters are explained here: https://platform.openai.com/docs/api-reference/chat/create
+    // OpenAI parameters are explained here:
+    // https://platform.openai.com/docs/api-reference/chat/create
     try {
       LOGGER.debug("Chat Answer Prompt Operation called with prompt: {}", prompt);
       ChatLanguageModel model = configuration.getModel();
       Assistant assistant = AiServices.create(Assistant.class, model);
       Result<String> answer = assistant.chat(prompt);
+
+      // Calculate confidence score if enabled
+      ConfidenceScore confidenceScore = ConfidenceService.calculateConfidence(prompt, answer.content(),
+                                                                              configuration);
+
       JSONObject jsonObject = new JSONObject();
       jsonObject.put(MuleChainConstants.RESPONSE, answer.content());
-      LOGGER.debug("Chat Answer Prompt Operation completed with response: {}", answer.content());
-      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>());
+      LOGGER.debug("Chat Answer Prompt Operation completed with response: {} and confidence: {}",
+                   answer.content(), confidenceScore != null ? confidenceScore.toString() : "unavailable");
+
+      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>(), confidenceScore);
     } catch (Exception e) {
-      throw new ModuleException("Unable to respond with the chat provided", MuleChainErrorType.AI_SERVICES_FAILURE, e);
+      throw new ModuleException("Unable to respond with the chat provided",
+                                MuleChainErrorType.AI_SERVICES_FAILURE, e);
     }
   }
 
@@ -87,28 +100,34 @@ public class LangchainLLMOperations {
    * Helps in defining an AI Agent configured with a prompt template
    *
    * @param configuration Refers to the configuration object
-   * @param dataset Refers to the user query to be acted upon
-   * @param template Refers to sample template used by LLM to respond adequately to the user queries
-   * @param instructions This provides the LLM on how to understand and respond to the user queries
+   * @param dataset       Refers to the user query to be acted upon
+   * @param template      Refers to sample template used by LLM to respond
+   *                      adequately to the user queries
+   * @param instructions  This provides the LLM on how to understand and respond
+   *                      to the user queries
    * @return Returns the corresponding response as returned by the LLM
    */
   @MediaType(value = APPLICATION_JSON, strict = false)
   @Alias("AGENT-define-prompt-template")
   @Throws(AiServiceErrorTypeProvider.class)
   @OutputJsonType(schema = "api/response/Response.json")
-  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> definePromptTemplate(@Config LangchainLLMConfiguration configuration,
+  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> definePromptTemplate(
+                                                                                                                          @Config LangchainLLMConfiguration configuration,
                                                                                                                           @Content(
                                                                                                                               primary = true) String dataset,
                                                                                                                           @Content String template,
                                                                                                                           @Content String instructions) {
 
     try {
-      LOGGER.debug("Agent Define Prompt Template Operation called with prompt: {}, template: {} & instruction: {}", dataset,
+      LOGGER.debug(
+                   "Agent Define Prompt Template Operation called with prompt: {}, template: {} & instruction: {}",
+                   dataset,
                    template, instructions);
       ChatLanguageModel model = configuration.getModel();
 
-      PromptTemplate promptTemplate = PromptTemplate.from(template + System.lineSeparator() + "Instructions: {{instructions}}"
-          + System.lineSeparator() + "Dataset: {{dataset}}");
+      PromptTemplate promptTemplate = PromptTemplate
+          .from(template + System.lineSeparator() + "Instructions: {{instructions}}"
+              + System.lineSeparator() + "Dataset: {{dataset}}");
 
       Map<String, Object> variables = new HashMap<>();
       variables.put(MuleChainConstants.INSTRUCTIONS, instructions);
@@ -120,12 +139,19 @@ public class LangchainLLMOperations {
 
       Result<String> answer = assistant.chat(prompt.text());
 
+      // Calculate confidence score if enabled
+      ConfidenceScore confidenceScore = ConfidenceService.calculateConfidence(prompt.text(), answer.content(),
+                                                                              configuration);
+
       JSONObject jsonObject = new JSONObject();
       jsonObject.put(MuleChainConstants.RESPONSE, answer.content());
-      LOGGER.debug("Agent Define Prompt Template Operation completed with response: {}", answer.content());
-      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>());
+      LOGGER.debug("Agent Define Prompt Template Operation completed with response: {} and confidence: {}",
+                   answer.content(), confidenceScore != null ? confidenceScore.toString() : "unavailable");
+
+      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>(), confidenceScore);
     } catch (Exception e) {
-      throw new ModuleException("Unable to reply with the correct prompt template", MuleChainErrorType.AI_SERVICES_FAILURE, e);
+      throw new ModuleException("Unable to reply with the correct prompt template",
+                                MuleChainErrorType.AI_SERVICES_FAILURE, e);
     }
   }
 
@@ -168,12 +194,14 @@ public class LangchainLLMOperations {
   }
 
   /**
-   * Analyzes the sentiment of the user data and returns both the sentiment score and category, and also provides a chat answer
+   * Analyzes the sentiment of the user data and returns both the sentiment score
+   * and category, and also provides a chat answer
    * based on the sentiment analysis.
    *
    * @param configuration Refers to the configuration object
-   * @param data Refers to the user input which needs to be analyzed
-   * @return Returns the response with both sentiment score, category, and chat reply
+   * @param data          Refers to the user input which needs to be analyzed
+   * @return Returns the response with both sentiment score, category, and chat
+   *         reply
    */
   @MediaType(value = MediaType.APPLICATION_JSON, strict = false)
   @Alias("SENTIMENT-analyze")
@@ -193,7 +221,8 @@ public class LangchainLLMOperations {
       // Create an instance of SentimentAnalyzer using the language model
       SentimentAnalyzer sentimentAnalyzer = AiServices.create(SentimentAnalyzer.class, model);
 
-      // Analyze sentiment of the provided data and get a floating-point score between -1 and 1
+      // Analyze sentiment of the provided data and get a floating-point score between
+      // -1 and 1
       Result<Double> sentimentResult = sentimentAnalyzer.analyzeSentimentOf(data);
       double sentimentScore = sentimentResult.content(); // The dynamic sentiment score
       LOGGER.info("Sentiment analyzed with score: {}", sentimentScore);
@@ -207,15 +236,17 @@ public class LangchainLLMOperations {
 
       String chatResponse;
       if (generateResponse) {
-        // Get a response based on the input data provided (instead of using sentiment category)
+        // Get a response based on the input data provided (instead of using sentiment
+        // category)
         String chatPrompt = "Respond to the following input briefly:" + data;
 
-        // Call the answerPromptByModelName method to get the chat response based on the input data
+        // Call the answerPromptByModelName method to get the chat response based on the
+        // input data
         org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> chatResponseResult =
-            answerPromptByModelName(configuration, chatPrompt);
+            answerPromptByModelName(
+                                    configuration, chatPrompt);
 
         InputStream chatResponseStream = chatResponseResult.getOutput();
-
 
         // Convert InputStream to String
         chatResponse = convertInputStreamToString(chatResponseStream);
@@ -227,12 +258,16 @@ public class LangchainLLMOperations {
       JSONObject combinedResponse = new JSONObject(jsonResponse);
       combinedResponse.put("chatResponse", chatResponse); // Adding chat response to the JSON
 
+      // Calculate confidence score if enabled for sentiment analysis
+      ConfidenceScore confidenceScore = ConfidenceService.calculateConfidence(data, jsonResponse, configuration);
+
       // Return the final result encapsulating the combined response and attributes
-      return createLLMResponse(combinedResponse.toString(), sentimentResult, new HashMap<>());
+      return createLLMResponse(combinedResponse.toString(), sentimentResult, new HashMap<>(), confidenceScore);
 
     } catch (IllegalArgumentException ex) {
       LOGGER.error("Invalid input provided for sentiment analysis: {}", ex.getMessage());
-      throw new ModuleException("Invalid input for sentiment analysis", MuleChainErrorType.AI_SERVICES_FAILURE, ex);
+      throw new ModuleException("Invalid input for sentiment analysis", MuleChainErrorType.AI_SERVICES_FAILURE,
+                                ex);
     } catch (Exception ex) {
       LOGGER.error("Error during sentiment analysis: {}", ex.getMessage(), ex);
       throw new ModuleException("Failed to analyze sentiment", MuleChainErrorType.AI_SERVICES_FAILURE, ex);
@@ -258,29 +293,34 @@ public class LangchainLLMOperations {
   /**
    * Helper method to create a JSON response string for sentiment analysis.
    *
-   * @param sentimentScore The floating-point score of the analyzed sentiment (-1 to 1)
-   * @param sentimentCategory The sentiment category (VERY_POSITIVE, POSITIVE, etc.)
+   * @param sentimentScore    The floating-point score of the analyzed sentiment
+   *                          (-1 to 1)
+   * @param sentimentCategory The sentiment category (VERY_POSITIVE, POSITIVE,
+   *                          etc.)
    * @return A JSON string containing the sentiment score and category
    */
   private String createSentimentResponse(double sentimentScore, Sentiment sentimentCategory) {
     JSONObject jsonResponse = new JSONObject();
     jsonResponse.put(MuleChainConstants.SENTIMENT_SCORE, sentimentScore); // Sentiment score as floating-point
-    jsonResponse.put(MuleChainConstants.SENTIMENT_CATEGORY, sentimentCategory.name()); // Sentiment category as string
+    jsonResponse.put(MuleChainConstants.SENTIMENT_CATEGORY, sentimentCategory.name()); // Sentiment category as
+                                                                                       // string
     return jsonResponse.toString();
   }
 
   /**
-   * Use OpenAI or Mistral Moderation models to moderate the input (any, from user or llm)
+   * Use OpenAI or Mistral Moderation models to moderate the input (any, from user
+   * or llm)
    */
   @MediaType(value = APPLICATION_JSON, strict = false)
   @Alias("Toxicity-detection")
   @Throws(AiServiceErrorTypeProvider.class)
   @OutputJsonType(schema = "api/response/Response.json")
-  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> moderateInput(@Config LangchainLLMConfiguration configuration,
+  public org.mule.runtime.extension.api.runtime.operation.Result<InputStream, LLMResponseAttributes> moderateInput(
+                                                                                                                   @Config LangchainLLMConfiguration configuration,
                                                                                                                    String input) {
     try {
-      JSONObject resultObject =
-          org.mule.extension.mulechain.internal.llm.type.ModerationModelType.moderationType(input, configuration);
+      JSONObject resultObject = org.mule.extension.mulechain.internal.llm.type.ModerationModelType
+          .moderationType(input, configuration);
 
       String response = executeREST(resultObject.getString("url"), resultObject.getString("apiKey"),
                                     resultObject.getJSONObject("payload").toString());
@@ -292,10 +332,15 @@ public class LangchainLLMOperations {
       Result<String> answer = Result.<String>builder()
           .content(response)
           .tokenUsage(null)
-          .build();;
-      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>());
+          .build();
+
+      // Calculate confidence score if enabled
+      ConfidenceScore confidenceScore = ConfidenceService.calculateConfidence(input, response, configuration);
+
+      return createLLMResponse(jsonObject.toString(), answer, new HashMap<>(), confidenceScore);
     } catch (Exception e) {
-      throw new ModuleException("Unable to perform toxicity detection", MuleChainErrorType.AI_SERVICES_FAILURE, e);
+      throw new ModuleException("Unable to perform toxicity detection", MuleChainErrorType.AI_SERVICES_FAILURE,
+                                e);
     }
   }
 
@@ -339,7 +384,5 @@ public class LangchainLLMOperations {
     }
 
   }
-
-
 
 }

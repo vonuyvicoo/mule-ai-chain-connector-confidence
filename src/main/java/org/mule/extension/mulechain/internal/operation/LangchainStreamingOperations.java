@@ -28,7 +28,8 @@ import static java.time.Duration.ofSeconds;
 import static org.mule.runtime.extension.api.annotation.param.MediaType.ANY;
 
 /**
- * This class is a container for operations, every public method in this class will be taken as an extension operation.
+ * This class is a container for operations, every public method in this class
+ * will be taken as an extension operation.
  */
 @ExcludeFromGeneratedCoverage
 public class LangchainStreamingOperations {
@@ -49,13 +50,28 @@ public class LangchainStreamingOperations {
     String openaiApiKey = configuration.getConfigExtractor().extractValue("OPENAI_API_KEY");
     long durationInSec = configuration.getLlmTimeoutUnit().toSeconds(configuration.getLlmTimeout());
     try {
-      StreamingChatLanguageModel model = OpenAiStreamingChatModel.builder()
-          .apiKey(openaiApiKey)
-          .modelName(configuration.getModelName())
-          .maxTokens(configuration.getMaxTokens())
-          .temperature(configuration.getTemperature())
-          .timeout(ofSeconds(durationInSec))
-          .build();
+      boolean isReasoningModel = shouldUseMaxCompletionTokens(configuration.getModelName());
+
+      StreamingChatLanguageModel model;
+      if (isReasoningModel) {
+        // For reasoning models, avoid using builder that has default temperature
+        System.out.println("DEBUG: Creating streaming reasoning model without temperature");
+        model = OpenAiStreamingChatModel.builder()
+            .apiKey(openaiApiKey)
+            .modelName(configuration.getModelName())
+            .timeout(ofSeconds(durationInSec))
+            .maxCompletionTokens(configuration.getMaxTokens())
+            .build();
+      } else {
+        // For regular models, use normal builder with all parameters
+        model = OpenAiStreamingChatModel.builder()
+            .apiKey(openaiApiKey)
+            .modelName(configuration.getModelName())
+            .timeout(ofSeconds(durationInSec))
+            .temperature(configuration.getTemperature())
+            .maxTokens(configuration.getMaxTokens())
+            .build();
+      }
       Assistant assistant = AiServices.create(Assistant.class, model);
       TokenStream tokenStream = assistant.chat(prompt);
 
@@ -66,26 +82,53 @@ public class LangchainStreamingOperations {
         try {
           pipedOutputStream.write(value.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-          throw new ModuleException("Error occurred while streaming output", MuleChainErrorType.STREAMING_FAILURE, e);
+          throw new ModuleException("Error occurred while streaming output",
+                                    MuleChainErrorType.STREAMING_FAILURE, e);
         }
       })
           .onComplete(response -> {
             try {
               pipedOutputStream.close();
             } catch (IOException e) {
-              throw new ModuleException("Error occurred while closing the stream", MuleChainErrorType.STREAMING_FAILURE, e);
+              throw new ModuleException("Error occurred while closing the stream",
+                                        MuleChainErrorType.STREAMING_FAILURE, e);
             }
           })
           .onError(throwable -> {
-            throw new ModuleException("Exception occurred onError()", MuleChainErrorType.STREAMING_FAILURE, throwable);
+            throw new ModuleException("Exception occurred onError()", MuleChainErrorType.STREAMING_FAILURE,
+                                      throwable);
           })
           .start();
       return pipedInputStream;
     } catch (Exception e) {
-      throw new ModuleException("Unable to respond with the chat provided", MuleChainErrorType.AI_SERVICES_FAILURE, e);
+      throw new ModuleException("Unable to respond with the chat provided",
+                                MuleChainErrorType.AI_SERVICES_FAILURE, e);
     }
   }
 
+  /**
+   * Determines if the model requires max_completion_tokens instead of max_tokens.
+   * OpenAI models starting with "o" (like o1, o1-preview, o1-mini) or reasoning
+   * models require max_completion_tokens instead of max_tokens.
+   */
+  private static boolean shouldUseMaxCompletionTokens(String model) {
+    if (model == null) {
+      return false;
+    }
 
+    String lowerModel = model.toLowerCase();
 
+    // Check if model starts with "o" followed by a digit or dash (o1, o1-preview,
+    // o1-mini, etc.)
+    if (lowerModel.matches("^o[0-9].*") || lowerModel.matches("^o-.*")) {
+      return true;
+    }
+
+    // Check for reasoning models
+    if (lowerModel.contains("reasoning")) {
+      return true;
+    }
+
+    return false;
+  }
 }

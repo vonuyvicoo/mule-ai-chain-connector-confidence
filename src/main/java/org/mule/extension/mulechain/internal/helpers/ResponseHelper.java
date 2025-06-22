@@ -1,6 +1,7 @@
 package org.mule.extension.mulechain.internal.helpers;
 
 import dev.langchain4j.model.output.Response;
+import org.mule.extension.mulechain.api.metadata.ConfidenceScore;
 import org.mule.extension.mulechain.api.metadata.LLMResponseAttributes;
 import org.mule.extension.mulechain.api.metadata.ScannedDocResponseAttributes;
 import org.mule.extension.mulechain.api.metadata.TokenUsage;
@@ -22,31 +23,53 @@ public final class ResponseHelper {
   public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
                                                                              dev.langchain4j.service.Result<?> result,
                                                                              Map<String, String> responseAttributes) {
+    return createLLMResponse(response, result, responseAttributes, null);
+  }
+
+  public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
+                                                                             dev.langchain4j.service.Result<?> result,
+                                                                             Map<String, String> responseAttributes,
+                                                                             ConfidenceScore confidenceScore) {
 
     TokenUsage tokenUsage = result.tokenUsage() != null ? new TokenUsage(result.tokenUsage().inputTokenCount(),
                                                                          result.tokenUsage().outputTokenCount(),
                                                                          result.tokenUsage().totalTokenCount())
         : null;
 
-    return createLLMResponse(response, tokenUsage, responseAttributes);
+    return createLLMResponse(response, tokenUsage, responseAttributes, confidenceScore);
   }
 
   public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
                                                                              Response<?> result,
                                                                              Map<String, String> responseAttributes) {
+    return createLLMResponse(response, result, responseAttributes, null);
+  }
+
+  public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
+                                                                             Response<?> result,
+                                                                             Map<String, String> responseAttributes,
+                                                                             ConfidenceScore confidenceScore) {
     TokenUsage tokenUsage = result.tokenUsage() != null ? new TokenUsage(result.tokenUsage().inputTokenCount(),
                                                                          result.tokenUsage().outputTokenCount(),
                                                                          result.tokenUsage().totalTokenCount())
         : null;
-    return createLLMResponse(response, tokenUsage, responseAttributes);
+    return createLLMResponse(response, tokenUsage, responseAttributes, confidenceScore);
   }
 
   public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
                                                                              TokenUsage tokenUsage,
                                                                              Map<String, String> responseAttributes) {
+    return createLLMResponse(response, tokenUsage, responseAttributes, null);
+  }
+
+  public static Result<InputStream, LLMResponseAttributes> createLLMResponse(String response,
+                                                                             TokenUsage tokenUsage,
+                                                                             Map<String, String> responseAttributes,
+                                                                             ConfidenceScore confidenceScore) {
 
     return Result.<InputStream, LLMResponseAttributes>builder()
-        .attributes(new LLMResponseAttributes(tokenUsage, (HashMap<String, String>) responseAttributes))
+        .attributes(new LLMResponseAttributes(tokenUsage, (HashMap<String, String>) responseAttributes,
+                                              confidenceScore))
         .attributesMediaType(org.mule.runtime.api.metadata.MediaType.APPLICATION_JAVA)
         .output(toInputStream(response, StandardCharsets.UTF_8))
         .mediaType(org.mule.runtime.api.metadata.MediaType.APPLICATION_JSON)
@@ -57,7 +80,8 @@ public final class ResponseHelper {
                                                                                     List<ScannedDocResponseAttributes.DocResponseAttribute> docResponseAttributes,
                                                                                     Map<String, String> responseAttributes) {
     return Result.<InputStream, ScannedDocResponseAttributes>builder()
-        .attributes(new ScannedDocResponseAttributes((ArrayList<ScannedDocResponseAttributes.DocResponseAttribute>) docResponseAttributes,
+        .attributes(new ScannedDocResponseAttributes(
+                                                     (ArrayList<ScannedDocResponseAttributes.DocResponseAttribute>) docResponseAttributes,
                                                      (HashMap<String, String>) responseAttributes))
         .attributesMediaType(org.mule.runtime.api.metadata.MediaType.APPLICATION_JAVA)
         .output(toInputStream(response, StandardCharsets.UTF_8))

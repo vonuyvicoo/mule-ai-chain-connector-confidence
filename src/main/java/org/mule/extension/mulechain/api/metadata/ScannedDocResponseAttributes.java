@@ -28,10 +28,18 @@ public class ScannedDocResponseAttributes implements Serializable {
 
     private final int page;
     private final TokenUsage tokenUsage;
+    private final ConfidenceScore confidenceScore;
 
     public DocResponseAttribute(int page, TokenUsage tokenUsage) {
       this.page = page;
       this.tokenUsage = tokenUsage;
+      this.confidenceScore = null;
+    }
+
+    public DocResponseAttribute(int page, TokenUsage tokenUsage, ConfidenceScore confidenceScore) {
+      this.page = page;
+      this.tokenUsage = tokenUsage;
+      this.confidenceScore = confidenceScore;
     }
 
     public int getPage() {
@@ -41,6 +49,9 @@ public class ScannedDocResponseAttributes implements Serializable {
     public TokenUsage getTokenUsage() {
       return tokenUsage;
     }
+
+    public ConfidenceScore getConfidenceScore() {
+      return confidenceScore;
+    }
   }
 }
-

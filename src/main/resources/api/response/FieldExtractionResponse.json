@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Field Extraction Response",
+  "properties": {
+    "fields": {
+      "type": "object",
+      "description": "Extracted fields with their values and confidence scores",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "description": "The extracted value for this field"
+            },
+            "confidence_score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Confidence score for the extracted value"
+            },
+            "confidence_strategy": {
+              "type": "string",
+              "description": "Strategy used to calculate confidence"
+            },
+            "page_number": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number where the field was found"
+            },
+            "metrics": {
+              "type": "object",
+              "description": "Additional confidence calculation metrics"
+            }
+          },
+          "required": ["value", "page_number"]
+        }
+      }
+    },
+    "total_pages": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of pages processed"
+    },
+    "extraction_summary": {
+      "type": "object",
+      "properties": {
+        "total_fields_requested": {
+          "type": "integer",
+          "description": "Number of fields requested for extraction"
+        },
+        "total_fields_found": {
+          "type": "integer",
+          "description": "Number of fields successfully extracted"
+        },
+        "average_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Average confidence score across all extracted fields"
+        }
+      }
+    }
+  },
+  "required": ["fields", "total_pages"]
+}

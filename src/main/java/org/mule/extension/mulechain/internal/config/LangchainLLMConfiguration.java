@@ -4,6 +4,7 @@
 package org.mule.extension.mulechain.internal.config;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import org.mule.extension.mulechain.api.config.ConfidenceStrategy;
 import org.mule.extension.mulechain.internal.operation.LangchainEmbeddingStoresOperations;
 import org.mule.extension.mulechain.internal.operation.LangchainImageModelsOperations;
 import org.mule.extension.mulechain.internal.llm.type.LangchainLLMType;
@@ -31,11 +32,13 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
- * This class represents an extension configuration, values set in this class are commonly used across multiple
+ * This class represents an extension configuration, values set in this class
+ * are commonly used across multiple
  * operations since they represent something core from the extension.
  */
 @Configuration(name = "config")
-@Operations({LangchainLLMOperations.class, LangchainEmbeddingStoresOperations.class, LangchainImageModelsOperations.class})
+@Operations({LangchainLLMOperations.class, LangchainEmbeddingStoresOperations.class,
+    LangchainImageModelsOperations.class})
 public class LangchainLLMConfiguration implements Initialisable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LangchainLLMConfiguration.class);
@@ -71,12 +74,11 @@ public class LangchainLLMConfiguration implements Initialisable {
   @Optional(defaultValue = "0.95")
   private double topP = 0.95;
 
-
   @Parameter
   @Placement(order = 7, tab = Placement.DEFAULT_TAB)
-  @Optional(defaultValue = "60")
+  @Optional(defaultValue = "120")
   @DisplayName("LLM timeout")
-  private int llmTimeout = 60;
+  private int llmTimeout = 120;
 
   @Parameter
   @Optional(defaultValue = "SECONDS")
@@ -90,6 +92,20 @@ public class LangchainLLMConfiguration implements Initialisable {
   @Expression(ExpressionSupport.SUPPORTED)
   @Optional(defaultValue = "500")
   private int maxTokens = 500;
+
+  @Parameter
+  @Optional(defaultValue = "false")
+  @Placement(order = 10, tab = "Advanced")
+  @DisplayName("Enable Confidence Score")
+  @Summary("Enable confidence score calculation for LLM responses (OpenAI only)")
+  private boolean enableConfidenceScore = false;
+
+  @Parameter
+  @Optional(defaultValue = "ENTROPY_BASED")
+  @Placement(order = 11, tab = "Advanced")
+  @DisplayName("Confidence Strategy")
+  @Summary("Strategy for calculating confidence scores")
+  private ConfidenceStrategy confidenceStrategy = ConfidenceStrategy.ENTROPY_BASED;
 
   private ConfigExtractor configExtractor;
 
@@ -119,7 +135,6 @@ public class LangchainLLMConfiguration implements Initialisable {
     return topP;
   }
 
-
   public int getLlmTimeout() {
     return llmTimeout;
   }
@@ -130,6 +145,14 @@ public class LangchainLLMConfiguration implements Initialisable {
 
   public int getMaxTokens() {
     return maxTokens;
+  }
+
+  public boolean getEnableConfidenceScore() {
+    return enableConfidenceScore;
+  }
+
+  public ConfidenceStrategy getConfidenceStrategy() {
+    return confidenceStrategy;
   }
 
   public ConfigExtractor getConfigExtractor() {
